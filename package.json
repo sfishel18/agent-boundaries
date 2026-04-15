@@ -1,0 +1,25 @@
+{
+  "name": "opencode-plugin-boundaries",
+  "version": "0.0.1",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "test": "bun node_modules/vitest/dist/cli.js run",
+    "test:watch": "bun node_modules/vitest/dist/cli.js",
+    "link": "mkdir -p ~/.config/opencode/plugins && cp index.ts ~/.config/opencode/plugins/opencode-plugin-boundaries.ts"
+  },
+  "exports": {
+    ".": "./index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "vitest": "^4.1.4"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.4.3",
+    "bash-parser": "^0.5.0"
+  }
+}
