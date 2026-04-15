@@ -1,15 +1,27 @@
 {
   "name": "opencode-plugin-boundaries",
-  "version": "0.0.1",
-  "module": "index.ts",
+  "version": "0.1.0",
+  "description": "OpenCode plugin for enforcing agent boundary rules",
+  "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "bun build --target=browser --outdir=dist index.ts --external @opencode-ai/plugin --external bash-parser",
     "test": "bun node_modules/vitest/dist/cli.js run",
     "test:watch": "bun node_modules/vitest/dist/cli.js",
-    "link": "mkdir -p ~/.config/opencode/plugins && cp index.ts ~/.config/opencode/plugins/opencode-plugin-boundaries.ts"
-  },
-  "exports": {
-    ".": "./index.ts"
+    "link": "mkdir -p ~/.config/opencode/plugins && cp index.ts ~/.config/opencode/plugins/opencode-plugin-boundaries.ts",
+    "prepublishOnly": "bun run build"
   },
   "devDependencies": {
     "@types/bun": "latest",
