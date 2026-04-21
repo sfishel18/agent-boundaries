@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseNudges, splitIntoCommands, extractCommands } from './index.ts';
+import { parseNudges, splitIntoCommands, extractCommands } from './parser.ts';
 
 // ─── parseNudges ──────────────────────────────────────────────────────────────
 
@@ -106,7 +106,10 @@ describe('splitIntoCommands', () => {
 
   it('extracts commands from sub-commands', () => {
     const result = splitIntoCommands('echo $(git rev-parse HEAD)');
-    expect(result).toEqual(['echo $(git rev-parse HEAD)', 'git rev-parse HEAD']);
+    expect(result).toEqual([
+      'echo $(git rev-parse HEAD)',
+      'git rev-parse HEAD',
+    ]);
   });
 
   it('falls back to [command] when the parser throws on unsupported syntax', () => {
