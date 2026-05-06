@@ -11,13 +11,14 @@
   ],
   "scripts": {
     "build": "bun build --outdir=dist index.ts --external @opencode-ai/plugin",
-    "test": "bun node_modules/vitest/dist/cli.js run",
-    "test:watch": "bun node_modules/vitest/dist/cli.js",
+    "test": "bun run vitest --run",
+    "test:watch": "bun run vitest",
     "link": "mkdir -p ~/.config/opencode/plugins && cp index.ts ~/.config/opencode/plugins/opencode-plugin-boundaries.ts",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "vitest": "^4.1.5"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "^1.4.3",
