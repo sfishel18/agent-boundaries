@@ -1,67 +1,67 @@
 import { describe, it, expect } from 'vitest';
-import { parseNudges, splitIntoCommands, extractCommands } from './parser.ts';
+import { parseReminders, splitIntoCommands, extractCommands } from './parser.ts';
 
-// ─── parseNudges ──────────────────────────────────────────────────────────────
+// ─── parseReminders ───────────────────────────────────────────────────────────
 
-describe('parseNudges', () => {
+describe('parseReminders', () => {
   it('returns an empty array for empty options', () => {
-    expect(parseNudges({})).toEqual([]);
+    expect(parseReminders({})).toEqual([]);
   });
 
-  it('ignores keys that are not nudge(...) patterns', () => {
-    expect(parseNudges({ foo: 'bar', 'nudge-bad': 'x' })).toEqual([]);
+  it('ignores keys that are not reminder(...) patterns', () => {
+    expect(parseReminders({ foo: 'bar', 'reminder-bad': 'x' })).toEqual([]);
   });
 
-  it('ignores nudge keys whose value is not a string', () => {
-    expect(parseNudges({ 'nudge(npx *)': 42 as unknown as string })).toEqual(
+  it('ignores reminder keys whose value is not a string', () => {
+    expect(parseReminders({ 'reminder(npx *)': 42 as unknown as string })).toEqual(
       [],
     );
   });
 
-  it('parses a single nudge rule', () => {
-    const nudges = parseNudges({ 'nudge(npx *)': 'use npm run instead' });
-    expect(nudges).toHaveLength(1);
-    expect(nudges[0]!.message).toBe('use npm run instead');
+  it('parses a single reminder rule', () => {
+    const reminders = parseReminders({ 'reminder(npx *)': 'use npm run instead' });
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]!.message).toBe('use npm run instead');
   });
 
-  it('converts a glob pattern with * to a working RegExp', () => {
-    const [nudge] = parseNudges({ 'nudge(npx *)': 'msg' });
-    expect(nudge!.pattern.test('npx eslint .')).toBe(true);
-    expect(nudge!.pattern.test('npx foo --bar')).toBe(true);
-    expect(nudge!.pattern.test('npm run lint')).toBe(false);
+it('converts a glob pattern with * to a working RegExp', () => {
+    const [reminder] = parseReminders({ 'reminder(npx *)': 'msg' });
+    expect(reminder!.pattern.test('npx eslint .')).toBe(true);
+    expect(reminder!.pattern.test('npx foo --bar')).toBe(true);
+    expect(reminder!.pattern.test('npm run lint')).toBe(false);
   });
 
   it('escapes regex special characters in the glob pattern', () => {
     // The dot in "node_modules/.bin/foo" must be a literal dot, not a wildcard
-    const [nudge] = parseNudges({ 'nudge(node_modules/.bin/*)': 'msg' });
-    expect(nudge!.pattern.test('node_modules/.bin/eslint')).toBe(true);
+    const [reminder] = parseReminders({ 'reminder(node_modules/.bin/*)': 'msg' });
+    expect(reminder!.pattern.test('node_modules/.bin/eslint')).toBe(true);
     // A pattern with any char in place of the dot should NOT match
-    expect(nudge!.pattern.test('node_modulesXbinYfoo')).toBe(false);
+    expect(reminder!.pattern.test('node_modulesXbinYfoo')).toBe(false);
   });
 
-  it('parses multiple nudge rules', () => {
-    const nudges = parseNudges({
-      'nudge(npx *)': 'use npm run',
-      'nudge(git push --force *)': 'discuss first',
+  it('parses multiple reminder rules', () => {
+    const reminders = parseReminders({
+      'reminder(npx *)': 'use npm run',
+      'reminder(git push --force *)': 'discuss first',
     });
-    expect(nudges).toHaveLength(2);
-    expect(nudges.map((n) => n.message)).toEqual([
+    expect(reminders).toHaveLength(2);
+    expect(reminders.map((r) => r.message)).toEqual([
       'use npm run',
       'discuss first',
     ]);
   });
 
   it('patterns are anchored at the start — does not match a mid-string occurrence', () => {
-    const [nudge] = parseNudges({ 'nudge(npx *)': 'use npm run' });
-    expect(nudge!.pattern.test('npx eslint .')).toBe(true);
-    expect(nudge!.pattern.test('echo npx eslint .')).toBe(false);
+    const [reminder] = parseReminders({ 'reminder(npx *)': 'use npm run' });
+    expect(reminder!.pattern.test('npx eslint .')).toBe(true);
+    expect(reminder!.pattern.test('echo npx eslint .')).toBe(false);
   });
 
   it('patterns are not anchored at the end — a prefix pattern still matches', () => {
     // "rm -rf /" should match "rm -rf /tmp" because end is unanchored
-    const [nudge] = parseNudges({ 'nudge(rm -rf /)': 'absolutely not' });
-    expect(nudge!.pattern.test('rm -rf /')).toBe(true);
-    expect(nudge!.pattern.test('rm -rf /tmp')).toBe(true);
+    const [reminder] = parseReminders({ 'reminder(rm -rf /)': 'absolutely not' });
+    expect(reminder!.pattern.test('rm -rf /')).toBe(true);
+    expect(reminder!.pattern.test('rm -rf /tmp')).toBe(true);
   });
 });
 
