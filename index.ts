@@ -1,21 +1,21 @@
 import type { Plugin } from '@opencode-ai/plugin';
-import { splitIntoCommands, parseNudges } from './src/parser';
+import { splitIntoCommands, parseReminders } from './src/parser';
 
 export const BoundariesPlugin: Plugin = async ({ client }, options = {}) => {
-  let nudges = parseNudges(options);
+  let reminders = parseReminders(options);
 
   await client.app.log({
     body: {
       service: 'opencode-plugin-boundaries',
       level: 'info',
       message: 'Plugin initialized',
-      extra: { nudgeCount: nudges.length },
+      extra: { reminderCount: reminders.length },
     },
   });
 
   return {
     config: async (config) => {
-      if (nudges.length > 0) {
+      if (reminders.length > 0) {
         return;
       }
       const pluginConfig = config.plugin?.find(
@@ -25,12 +25,12 @@ export const BoundariesPlugin: Plugin = async ({ client }, options = {}) => {
             p[0].endsWith('/opencode-plugin-boundaries')),
       )?.[1];
       if (pluginConfig && typeof pluginConfig === 'object') {
-        nudges = parseNudges(pluginConfig);
+        reminders = parseReminders(pluginConfig);
       }
     },
 
     'tool.execute.before': async (input, output) => {
-      if (input.tool !== 'bash' || nudges.length === 0) {
+      if (input.tool !== 'bash' || reminders.length === 0) {
         return;
       }
       const command: string = output.args.command ?? '';
@@ -40,10 +40,10 @@ export const BoundariesPlugin: Plugin = async ({ client }, options = {}) => {
       }
       const primitives = splitIntoCommands(command);
       for (const primitive of primitives) {
-        for (const nudge of nudges) {
-          if (nudge.pattern.test(primitive)) {
+        for (const reminder of reminders) {
+          if (reminder.pattern.test(primitive)) {
             throw new Error(
-              `Nudge: ${nudge.message}\n\n` +
+              `Reminder: ${reminder.message}\n\n` +
                 `If you want to run this command anyway, set the tool call description to start with "OVERRIDE:" to bypass this check.`,
             );
           }

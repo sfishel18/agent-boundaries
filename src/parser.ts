@@ -159,21 +159,21 @@ export function splitIntoCommands(command: string): string[] {
   }
 }
 
-export function parseNudges(
+export function parseReminders(
   options: PluginOptions,
 ): Array<{ pattern: RegExp; message: string }> {
-  const nudges: Array<{ pattern: RegExp; message: string }> = [];
+  const reminders: Array<{ pattern: RegExp; message: string }> = [];
 
   for (const [key, value] of Object.entries(options)) {
-    const match = key.match(/^nudge\((.+)\)$/);
+    const match = key.match(/^reminder\((.+)\)$/);
     if (!match || typeof value !== 'string') continue;
 
     const glob = match[1]!;
     const escaped = glob
       .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
       .replace(/\*/g, '.*');
-    nudges.push({ pattern: new RegExp(`^${escaped}`), message: value });
+    reminders.push({ pattern: new RegExp(`^${escaped}`), message: value });
   }
 
-  return nudges;
+  return reminders;
 }
