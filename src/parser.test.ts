@@ -19,30 +19,51 @@ describe('parseReminders', () => {
   });
 
   it('parses a single reminder rule', () => {
-    const reminders = parseReminders({ 'reminder(npx *)': 'use npm run instead' });
+    const reminders = parseReminders({ 'reminder(npx .*)': 'use npm run instead' });
     expect(reminders).toHaveLength(1);
     expect(reminders[0]!.message).toBe('use npm run instead');
   });
 
-it('converts a glob pattern with * to a working RegExp', () => {
-    const [reminder] = parseReminders({ 'reminder(npx *)': 'msg' });
+  it('treats pattern as raw regex - .* is wildcard for zero or more chars', () => {
+    const [reminder] = parseReminders({ 'reminder(npx .*)': 'msg' });
     expect(reminder!.pattern.test('npx eslint .')).toBe(true);
     expect(reminder!.pattern.test('npx foo --bar')).toBe(true);
     expect(reminder!.pattern.test('npm run lint')).toBe(false);
   });
 
-  it('escapes regex special characters in the glob pattern', () => {
-    // The dot in "node_modules/.bin/foo" must be a literal dot, not a wildcard
-    const [reminder] = parseReminders({ 'reminder(node_modules/.bin/*)': 'msg' });
-    expect(reminder!.pattern.test('node_modules/.bin/eslint')).toBe(true);
-    // A pattern with any char in place of the dot should NOT match
-    expect(reminder!.pattern.test('node_modulesXbinYfoo')).toBe(false);
+  it('accepts raw regex syntax - character classes like [0-9]+ work', () => {
+    const [reminder] = parseReminders({ 'reminder(bunx [0-9]+)': 'msg' });
+    expect(reminder!.pattern.test('bunx 5')).toBe(true);
+    expect(reminder!.pattern.test('bunx 123')).toBe(true);
+    expect(reminder!.pattern.test('bunx abc')).toBe(false);
+  });
+
+  it('accepts raw regex syntax - special chars like . and + work as regex', () => {
+    // Dot matches any character (no end anchor, so "npx e" matches prefix)
+    const [reminder1] = parseReminders({ 'reminder(npx .)': 'msg' });
+    expect(reminder1!.pattern.test('npx a')).toBe(true);
+    expect(reminder1!.pattern.test('npx e')).toBe(true); // matches "npx e" prefix
+
+    // Plus means one or more - use \d+ to test digits specifically
+    const [reminder2] = parseReminders({ 'reminder(npx \\d+)': 'msg' });
+    expect(reminder2!.pattern.test('npx 5')).toBe(true);
+    expect(reminder2!.pattern.test('npx 123')).toBe(true);
+    expect(reminder2!.pattern.test('npx abc')).toBe(false);
+  });
+
+  it('handles invalid regex patterns gracefully - skips them', () => {
+    const reminders = parseReminders({
+      'reminder(npx .*)': 'valid',
+      'reminder(invalid[': 'invalid', // invalid regex - unbalanced bracket
+    });
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]!.message).toBe('valid');
   });
 
   it('parses multiple reminder rules', () => {
     const reminders = parseReminders({
-      'reminder(npx *)': 'use npm run',
-      'reminder(git push --force *)': 'discuss first',
+      'reminder(npx .*)': 'use npm run',
+      'reminder(git push --force .*)': 'discuss first',
     });
     expect(reminders).toHaveLength(2);
     expect(reminders.map((r) => r.message)).toEqual([
@@ -52,7 +73,7 @@ it('converts a glob pattern with * to a working RegExp', () => {
   });
 
   it('patterns are anchored at the start — does not match a mid-string occurrence', () => {
-    const [reminder] = parseReminders({ 'reminder(npx *)': 'use npm run' });
+    const [reminder] = parseReminders({ 'reminder(npx .*)': 'use npm run' });
     expect(reminder!.pattern.test('npx eslint .')).toBe(true);
     expect(reminder!.pattern.test('echo npx eslint .')).toBe(false);
   });

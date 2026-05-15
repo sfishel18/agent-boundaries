@@ -168,11 +168,16 @@ export function parseReminders(
     const match = key.match(/^reminder\((.+)\)$/);
     if (!match || typeof value !== 'string') continue;
 
-    const glob = match[1]!;
-    const escaped = glob
-      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/\*/g, '.*');
-    reminders.push({ pattern: new RegExp(`^${escaped}`), message: value });
+    const pattern = match[1]!;
+
+    // Treat pattern as raw regex - wrap in ^ to anchor start, no end anchor
+    try {
+      const regex = new RegExp(`^(${pattern})`);
+      reminders.push({ pattern: regex, message: value });
+    } catch {
+      // Invalid regex - skip this pattern gracefully
+      continue;
+    }
   }
 
   return reminders;
