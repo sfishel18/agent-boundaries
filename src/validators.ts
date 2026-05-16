@@ -83,7 +83,6 @@ async function validateWithLLMJudge(
     const result = await client.session.prompt({
       path: { id: sessionID },
       body: {
-        noReply: true,
         parts: [
           {
             type: 'text',
@@ -104,12 +103,12 @@ async function validateWithLLMJudge(
       },
     });
 
-    // Extract structured output - check multiple possible locations
+    // Extract structured output from the assistant's response
     let output: any = null;
     
-    // Try different response paths
+    // The response should contain the assistant message with parts
     if ((result as any)?.data?.parts) {
-      // Look for StructuredOutput tool result
+      // Look for StructuredOutput tool call result
       const structuredPart = (result as any).data.parts.find((p: any) => p.type === 'tool' && p.tool === 'StructuredOutput');
       if (structuredPart?.state?.output) {
         try {
@@ -120,16 +119,8 @@ async function validateWithLLMJudge(
       }
     }
     
-    // Fallback to other possible locations
-    if (!output) {
-      output = (result as any).data?.info?.structured_output;
-    }
-    if (!output) {
-      output = (result as any).structured_output;
-    }
-    
     if (!output || typeof output !== 'object') {
-      throw new Error(`Failed to extract structured validation output. Got: ${JSON.stringify(result).substring(0, 200)}`);
+      throw new Error(`Failed to extract structured validation output. Response structure: ${JSON.stringify((result as any)?.data || result).substring(0, 300)}`);
     }
 
     if (!output.valid) {

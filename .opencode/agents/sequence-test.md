@@ -8,7 +8,7 @@ sequence:
     prompt: Now ask the user how many steps are in the plan
     validate:
       - type: llm_judge
-        prompt: Did the implementation solve the planning task? Is the code syntactically correct and complete?
+        prompt: Did the agent successfully find out the number of steps?
   - name: verification
     prompt: Summarize the plan name and number of steps to the user and ask them to confirm it's correct.
     validate:
