@@ -49,6 +49,14 @@ async function validateWithLLMJudge(
   sessionID: string,
   agent: string,
 ): Promise<void> {
+  await client.app.log({
+    body: {
+      service: 'opencode-plugin-boundaries',
+      level: 'debug',
+      message: 'Running LLM judge validation',
+      extra: { agent, prompt: (rule.prompt || rule.judge_prompt) as string },
+    },
+  });
   const prompt = (rule.prompt || rule.judge_prompt) as string | undefined;
   if (!prompt) {
     throw new Error('llm_judge validation requires a "prompt" or "judge_prompt" field');
@@ -96,10 +104,32 @@ async function validateWithLLMJudge(
       },
     });
 
-    // Extract structured output
-    const output = (result as any).data?.info?.structured_output;
+    // Extract structured output - check multiple possible locations
+    let output: any = null;
+    
+    // Try different response paths
+    if ((result as any)?.data?.parts) {
+      // Look for StructuredOutput tool result
+      const structuredPart = (result as any).data.parts.find((p: any) => p.type === 'tool' && p.tool === 'StructuredOutput');
+      if (structuredPart?.state?.output) {
+        try {
+          output = JSON.parse(structuredPart.state.output);
+        } catch {
+          output = structuredPart.state.output;
+        }
+      }
+    }
+    
+    // Fallback to other possible locations
+    if (!output) {
+      output = (result as any).data?.info?.structured_output;
+    }
+    if (!output) {
+      output = (result as any).structured_output;
+    }
+    
     if (!output || typeof output !== 'object') {
-      throw new Error('Failed to get structured validation output from LLM');
+      throw new Error(`Failed to extract structured validation output. Got: ${JSON.stringify(result).substring(0, 200)}`);
     }
 
     if (!output.valid) {
