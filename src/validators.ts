@@ -1,7 +1,5 @@
 import type { OpencodeClient } from '@opencode-ai/plugin';
 import type { ValidationRule, SequenceTask } from './sequence';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 
 /**
  * Validate that a task has been completed according to its rules
@@ -40,12 +38,12 @@ export async function validateTask(
 }
 
 /**
- * Validate using an LLM judge
- * Analyzes the conversation history to judge if the task was completed successfully.
- * 
- * Note: This is a heuristic validation that checks conversation quality without
- * blocking on an LLM response (which would deadlock inside a tool execution).
- * The validation looks for indicators that the task was completed well.
+ * Validate using an LLM judge via an ephemeral child session.
+ *
+ * Creates a separate child session, sends the validation prompt to it, reads
+ * the structured output from the response, then deletes the child session.
+ * Because the child session is independent, there is no deadlock with the
+ * main session that is currently executing.
  */
 async function validateWithLLMJudge(
   client: OpencodeClient,
@@ -53,86 +51,94 @@ async function validateWithLLMJudge(
   sessionID: string,
   agent: string,
 ): Promise<void> {
-  await client.app.log({
-    body: {
-      service: 'opencode-plugin-boundaries',
-      level: 'debug',
-      message: 'Running LLM judge validation',
-      extra: { agent, prompt: (rule.prompt || rule.judge_prompt) as string },
-    },
-  });
-  
-  const prompt = (rule.prompt || rule.judge_prompt) as string | undefined;
-  if (!prompt) {
-    throw new Error('llm_judge validation requires a "prompt" or "judge_prompt" field');
+  const judgePrompt = (rule.prompt || rule.judge_prompt) as string | undefined;
+  if (!judgePrompt) {
+    throw new Error('llm_judge validation requires a "prompt" field');
   }
 
+  const modelOverride = rule.model as { providerID: string; modelID: string } | undefined;
+
+  // Fetch recent messages from the main session to give the judge context
+  const messagesResponse = await client.session.messages({ path: { id: sessionID } });
+  const messages = (messagesResponse.data || []) as Array<{ info: any; parts: any[] }>;
+
+  // Build a transcript of the recent conversation (last 6 messages)
+  const transcript = messages
+    .slice(-6)
+    .map(({ info, parts }) => {
+      const role = info?.role === 'assistant' ? 'Assistant' : 'User';
+      const text = parts
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join('\n');
+      return text ? `${role}: ${text}` : null;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+
+  if (!transcript) {
+    throw new Error('llm_judge: no conversation content to validate against');
+  }
+
+  let childSessionID: string | null = null;
+
   try {
-    // Fetch recent messages to analyze
-    const response = await client.session.messages({ path: { id: sessionID } });
-    const messages = response.data || [];
-
-    if (messages.length === 0) {
-      throw new Error('No conversation history to validate against');
+    // Create an ephemeral child session
+    const createResponse = await client.session.create({
+      body: { parentID: sessionID },
+    });
+    childSessionID = (createResponse as any).data?.id;
+    if (!childSessionID) {
+      throw new Error('llm_judge: failed to create child session for validation');
     }
 
-    // Get the last assistant message (the task output)
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage) {
-      throw new Error('No task output found in conversation');
+    // Send the validation prompt to the child session with structured output
+    const promptBody: any = {
+      parts: [
+        {
+          type: 'text',
+          text: `You are a task validation judge. Review the following conversation and determine whether the task was completed successfully.\n\n## Conversation\n\n${transcript}\n\n## Validation criteria\n\n${judgePrompt}\n\nRespond only with the structured output tool.`,
+        },
+      ],
+      format: {
+        type: 'json_schema',
+        schema: {
+          type: 'object',
+          properties: {
+            valid: { type: 'boolean', description: 'true if the task was completed successfully' },
+            reason: { type: 'string', description: 'brief explanation of the judgement' },
+          },
+          required: ['valid', 'reason'],
+        },
+      },
+    };
+
+    if (modelOverride) {
+      promptBody.model = modelOverride;
     }
 
-    // Extract text content from the message
-    const taskOutput = lastMessage.parts
-      .filter((p): p is any => p.type === 'text')
-      .map((p) => p.text)
-      .join('\n');
+    const promptResponse = await client.session.prompt({
+      path: { id: childSessionID },
+      body: promptBody,
+    });
 
-    if (!taskOutput) {
-      throw new Error('Task output contains no text content');
+    const structured = (promptResponse as any).data?.info?.structured;
+    if (!structured || typeof structured !== 'object') {
+      throw new Error('llm_judge: structured output missing from judge response');
     }
 
-    // Heuristic validation: Check for signs of task completion
-    // This is a simple implementation - in production you might want more sophisticated checks
-    
-    // Check if output is substantial (not just a one-liner)
-    const outputLength = taskOutput.trim().length;
-    if (outputLength < 20) {
-      throw new Error(`Task output appears incomplete or too brief (${outputLength} chars). Please provide a more detailed response.`);
+    if (!structured.valid) {
+      throw new Error(`llm_judge: ${structured.reason}`);
     }
-
-    // Check for common rejection patterns that indicate incomplete work
-    const rejectionPatterns = [
-      /i cannot/i,
-      /i don't know/i,
-      /i'm not able/i,
-      /cannot complete/i,
-      /not possible/i,
-      /unable to/i,
-    ];
-
-    for (const pattern of rejectionPatterns) {
-      if (pattern.test(taskOutput)) {
-        throw new Error(`Task output indicates inability to complete: "${taskOutput.substring(0, 100)}..."`);
+  } finally {
+    // Always clean up the child session
+    if (childSessionID) {
+      try {
+        await client.session.delete({ path: { id: childSessionID } });
+      } catch {
+        // Non-fatal — orphaned session is cosmetic only
       }
     }
-
-    // Log successful validation
-    await client.app.log({
-      body: {
-        service: 'opencode-plugin-boundaries',
-        level: 'debug',
-        message: 'LLM judge validation passed',
-        extra: { agent, outputLength },
-      },
-    });
-  } catch (err) {
-    // Re-throw with context if it's our validation error
-    if (err instanceof Error && err.message.startsWith('Task') || err instanceof Error && err.message.includes('validation')) {
-      throw err;
-    }
-    // Otherwise wrap the error
-    throw new Error(`Failed to run LLM judge: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
