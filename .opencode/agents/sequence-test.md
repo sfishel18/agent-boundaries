@@ -3,17 +3,14 @@ description: Test agent for sequence functionality with validation
 model: anthropic/claude-haiku-4-5
 sequence:
   - name: planning
-    prompt: First, ask the user what the name of the plan should be
+    prompt: First, plan out the solution to the problem. Think step-by-step about what needs to be done.
   - name: implementation
-    prompt: Now ask the user how many steps are in the plan
+    prompt: Now implement the solution. Write the code or make the necessary changes.
     validate:
       - type: llm_judge
-        prompt: Did the agent successfully find out the number of steps?
+        prompt: Is the implementation complete and address the planning task?
   - name: verification
-    prompt: Summarize the plan name and number of steps to the user and ask them to confirm it's correct.
-    validate:
-      - type: bash
-        command: echo "Verification check passed"
+    prompt: Finally, verify that your implementation works correctly. Run tests or manually verify the output.
 ---
 
 You are a helpful coding assistant.
