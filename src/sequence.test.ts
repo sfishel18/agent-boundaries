@@ -82,12 +82,12 @@ sequence:
     const content = `---
 description: Test agent
 sequence:
-  - name: task-one
-    prompt: Do something
-    validate:
-      - type: tool_call
-        tool: bash
-        count: 2
+   - name: task-one
+     prompt: Do something
+     validate:
+       - type: tool_call
+         tool: bash
+         count: 2
 ---`;
 
     const result = parseFrontmatter(content);
@@ -95,7 +95,7 @@ sequence:
     expect(task?.validate?.[0]).toEqual({
       type: 'tool_call',
       tool: 'bash',
-      count: '2', // Note: parsed as string
+      count: 2, // Note: YAML parses as number
     });
   });
 

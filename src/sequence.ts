@@ -37,7 +37,7 @@ export function parseFrontmatter(content: string): AgentFrontmatter | null {
 
   const yamlContent = match[1];
   try {
-    const parsed = yaml.load(yamlContent) as Record<string, unknown>;
+    const parsed = yaml.load(yamlContent!) as Record<string, unknown>;
     if (!parsed || typeof parsed !== 'object') return null;
     if (!('description' in parsed)) return null;
 
@@ -66,7 +66,6 @@ export function parseFrontmatter(content: string): AgentFrontmatter | null {
   }
 }
 
-
 /**
  * Read and parse the sequence from an agent's Markdown file
  * @param agentName The name of the agent (e.g., "my-agent")
@@ -77,7 +76,12 @@ export async function readAgentSequence(
   agentName: string,
   directory: string,
 ): Promise<SequenceTask[] | null> {
-  const agentPath = path.join(directory, '.opencode', 'agents', `${agentName}.md`);
+  const agentPath = path.join(
+    directory,
+    '.opencode',
+    'agents',
+    `${agentName}.md`,
+  );
 
   try {
     const content = await fs.readFile(agentPath, 'utf-8');
