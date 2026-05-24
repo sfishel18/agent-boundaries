@@ -1,9 +1,9 @@
 import { tool } from '@opencode-ai/plugin';
-import type { ToolContext } from '@opencode-ai/plugin';
-import type { OpencodeClient } from '@opencode-ai/plugin';
-import type { SequenceTask } from './sequence';
+import type { Config, PluginInput, ToolContext } from '@opencode-ai/plugin';
 import { readAgentSequence } from './sequence';
 import { validateTask } from './validators';
+
+type OpencodeClient = PluginInput['client'];
 
 /**
  * Part type from OpenCode API
@@ -22,7 +22,13 @@ export interface ToolPart {
 
 export type ToolState =
   | { status: 'pending'; input: Record<string, unknown>; raw: string }
-  | { status: 'running'; input: Record<string, unknown>; title?: string; metadata?: Record<string, unknown>; time: { start: number } }
+  | {
+      status: 'running';
+      input: Record<string, unknown>;
+      title?: string;
+      metadata?: Record<string, unknown>;
+      time: { start: number };
+    }
   | {
       status: 'completed';
       input: Record<string, unknown>;
@@ -57,7 +63,12 @@ export interface MessageParts {
 function countCompletedNextTaskCalls(messages: MessageParts[]): number {
   const toolParts = messages
     .flatMap(({ parts }) => parts)
-    .filter((p): p is ToolPart => p.type === 'tool' && p.tool === 'next_task' && p.state.status === 'completed');
+    .filter(
+      (p): p is ToolPart =>
+        p.type === 'tool' &&
+        p.tool === 'next_task' &&
+        p.state.status === 'completed',
+    );
 
   return toolParts.length;
 }
@@ -65,15 +76,19 @@ function countCompletedNextTaskCalls(messages: MessageParts[]): number {
 /**
  * Create the next_task tool
  */
-export function createNextTaskTool(client: OpencodeClient) {
+export function createNextTaskTool(
+  client: OpencodeClient,
+  configRef: { current: Config | undefined },
+) {
   return tool({
-    description: 'Call this when you have completed your current task to receive your next task.',
+    description:
+      'Call this when you have completed your current task to receive your next task.',
     args: {},
     async execute(_args, context: ToolContext) {
       const { sessionID, agent, directory } = context;
 
-      // Read the sequence from the agent's Markdown file
-      const sequence = await readAgentSequence(agent, directory);
+      // Read and validate the sequence from the agent's configuration
+      const sequence = await readAgentSequence(agent, configRef.current);
 
       if (!sequence) {
         return 'This agent has no sequence defined.';
@@ -82,7 +97,9 @@ export function createNextTaskTool(client: OpencodeClient) {
       // Fetch the session's message history
       let messages: MessageParts[];
       try {
-        const response = await client.session.messages({ path: { id: sessionID } });
+        const response = await client.session.messages({
+          path: { id: sessionID },
+        });
         messages = response.data || [];
       } catch (err) {
         // If we can't fetch history, we can at least try to bootstrap task 0
@@ -111,7 +128,14 @@ export function createNextTaskTool(client: OpencodeClient) {
 
       // Return the next task's prompt
       const task = sequence[N];
-      return `## Task ${N + 1}: ${task.name}\n\n${task.prompt}`;
+      const nextTask = sequence[N + 1];
+      return `
+      ## Task ${N + 1}: ${task.name}
+      
+      ${task.prompt}. 
+      
+      When you have completed this task, YOU MUST ALWAYS STOP and call \`next_task\` again to receive instructions for the ${nextTask?.name ?? 'next'} task.
+      DO NOT attempt to work ahead or skip steps. Skipping ahead IS NOT HELPFUL, it's counterproductive.`;
     },
   });
 }

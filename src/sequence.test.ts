@@ -1,184 +1,255 @@
 import { describe, it, expect } from 'vitest';
-import { parseFrontmatter } from './sequence';
+import { readAgentSequence } from './sequence';
+import type { Config } from '@opencode-ai/plugin';
 
-describe('parseFrontmatter - sequence parsing', () => {
-  it('parses basic sequence with name and prompt', () => {
-    const content = `---
-description: Test agent
-sequence:
-  - name: task-one
-    prompt: Do task one
----`;
-
-    const result = parseFrontmatter(content);
-    expect(result?.sequence).toBeDefined();
-    expect(result?.sequence).toHaveLength(1);
-    expect(result?.sequence?.[0]).toEqual({
-      name: 'task-one',
-      prompt: 'Do task one',
-      validate: [],
-    });
+describe('readAgentSequence', () => {
+  it('returns null when config is undefined', async () => {
+    const result = await readAgentSequence('test-agent', undefined);
+    expect(result).toBeNull();
   });
 
-  it('parses multiple tasks in sequence', () => {
-    const content = `---
-description: Test agent
-sequence:
-  - name: planning
-    prompt: Plan the solution
-  - name: implementation
-    prompt: Implement it
-  - name: testing
-    prompt: Test it
----`;
-
-    const result = parseFrontmatter(content);
-    expect(result?.sequence).toHaveLength(3);
-    expect(result?.sequence?.[0]?.name).toBe('planning');
-    expect(result?.sequence?.[1]?.name).toBe('implementation');
-    expect(result?.sequence?.[2]?.name).toBe('testing');
+  it('returns null when agent is not in config', async () => {
+    const config: Config = {
+      agent: {},
+    };
+    const result = await readAgentSequence('nonexistent', config);
+    expect(result).toBeNull();
   });
 
-  it('parses validation rules (llm_judge)', () => {
-    const content = `---
-description: Test agent
-sequence:
-  - name: task-one
-    prompt: Do something
-    validate:
-      - type: llm_judge
-        prompt: Is it correct?
----`;
+  it('returns null when agent has no sequence defined', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {},
+      },
+    };
+    const result = await readAgentSequence('test-agent', config);
+    expect(result).toBeNull();
+  });
 
-    const result = parseFrontmatter(content);
-    const task = result?.sequence?.[0];
-    expect(task?.validate).toHaveLength(1);
-    expect(task?.validate?.[0]).toEqual({
+  it('parses a valid sequence with single task', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {
+          sequence: [
+            {
+              name: 'task-one',
+              prompt: 'Do something',
+            },
+          ],
+        },
+      },
+    };
+    const result = await readAgentSequence('test-agent', config);
+    expect(result).toEqual([
+      {
+        name: 'task-one',
+        prompt: 'Do something',
+      },
+    ]);
+  });
+
+  it('parses a sequence with multiple tasks', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {
+          sequence: [
+            {
+              name: 'task-one',
+              prompt: 'First task',
+            },
+            {
+              name: 'task-two',
+              prompt: 'Second task',
+            },
+            {
+              name: 'task-three',
+              prompt: 'Third task',
+            },
+          ],
+        },
+      },
+    };
+    const result = await readAgentSequence('test-agent', config);
+    expect(result).toHaveLength(3);
+    expect(result?.[0]?.name).toBe('task-one');
+    expect(result?.[1]?.name).toBe('task-two');
+    expect(result?.[2]?.name).toBe('task-three');
+  });
+
+  it('parses tasks with validation rules', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {
+          sequence: [
+            {
+              name: 'task-with-validation',
+              prompt: 'Do something',
+              validate: [
+                {
+                  type: 'bash',
+                  command: 'npm test',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const result = await readAgentSequence('test-agent', config);
+    expect(result?.[0]?.validate).toHaveLength(1);
+    expect(result?.[0]?.validate?.[0]?.type).toBe('bash');
+  });
+
+  it('rejects sequence with missing required name field', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {
+          sequence: [
+            {
+              // @ts-expect-error - intentionally missing 'name'
+              prompt: 'Missing name',
+            },
+          ],
+        },
+      },
+    };
+    await expect(readAgentSequence('test-agent', config)).rejects.toThrow();
+  });
+
+  it('rejects sequence with missing required prompt field', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {
+          sequence: [
+            {
+              // @ts-expect-error - intentionally missing 'prompt'
+              name: 'Missing prompt',
+            },
+          ],
+        },
+      },
+    };
+    await expect(readAgentSequence('test-agent', config)).rejects.toThrow();
+  });
+
+  it('rejects sequence with invalid validation rule type', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {
+          sequence: [
+            {
+              name: 'task',
+              prompt: 'Do something',
+              validate: [
+                {
+                  // @ts-expect-error - intentionally invalid type
+                  type: 'invalid_type',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    await expect(readAgentSequence('test-agent', config)).rejects.toThrow();
+  });
+
+  it('allows additional properties on validation rules (passthrough)', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {
+          sequence: [
+            {
+              name: 'task',
+              prompt: 'Do something',
+              validate: [
+                {
+                  type: 'llm_judge',
+                  prompt: 'Is it correct?',
+                  customField: 'custom-value',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const result = await readAgentSequence('test-agent', config);
+    expect(result?.[0]?.validate?.[0]).toEqual({
       type: 'llm_judge',
       prompt: 'Is it correct?',
+      customField: 'custom-value',
     });
   });
 
-  it('parses bash validator', () => {
-    const content = `---
-description: Test agent
-sequence:
-  - name: task-one
-    prompt: Do something
-    validate:
-      - type: bash
-        command: npm test
----`;
-
-    const result = parseFrontmatter(content);
-    const task = result?.sequence?.[0];
-    expect(task?.validate?.[0]).toEqual({
-      type: 'bash',
-      command: 'npm test',
-    });
+  it('parses mixed tasks with and without validation', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {
+          sequence: [
+            {
+              name: 'task-one',
+              prompt: 'No validation',
+            },
+            {
+              name: 'task-two',
+              prompt: 'With validation',
+              validate: [
+                {
+                  type: 'bash',
+                  command: 'echo ok',
+                },
+              ],
+            },
+            {
+              name: 'task-three',
+              prompt: 'No validation',
+            },
+          ],
+        },
+      },
+    };
+    const result = await readAgentSequence('test-agent', config);
+    expect(result).toHaveLength(3);
+    expect(result?.[0]?.validate).toBeUndefined();
+    expect(result?.[1]?.validate).toHaveLength(1);
+    expect(result?.[2]?.validate).toBeUndefined();
   });
 
-  it('parses tool_call validator', () => {
-    const content = `---
-description: Test agent
-sequence:
-   - name: task-one
-     prompt: Do something
-     validate:
-       - type: tool_call
-         tool: bash
-         count: 2
----`;
-
-    const result = parseFrontmatter(content);
-    const task = result?.sequence?.[0];
-    expect(task?.validate?.[0]).toEqual({
-      type: 'tool_call',
-      tool: 'bash',
-      count: 2, // Note: YAML parses as number
-    });
-  });
-
-  it('parses multiple validation rules', () => {
-    const content = `---
-description: Test agent
-sequence:
-  - name: task-one
-    prompt: Do something
-    validate:
-      - type: llm_judge
-        prompt: Is it correct?
-      - type: bash
-        command: npm test
----`;
-
-    const result = parseFrontmatter(content);
-    const task = result?.sequence?.[0];
-    expect(task?.validate).toHaveLength(2);
-    expect(task?.validate?.[0]?.type).toBe('llm_judge');
-    expect(task?.validate?.[1]?.type).toBe('bash');
-  });
-
-  it('returns null if no frontmatter found', () => {
-    const content = 'Just some text without frontmatter';
-    const result = parseFrontmatter(content);
-    expect(result).toBeNull();
-  });
-
-  it('returns null if frontmatter has no description', () => {
-    const content = `---
-some_key: some_value
----`;
-    const result = parseFrontmatter(content);
-    expect(result).toBeNull();
-  });
-
-  it('handles quoted values in YAML', () => {
-    const content = `---
-description: "Test agent"
-sequence:
-  - name: "task-one"
-    prompt: "Do task one"
----`;
-
-    const result = parseFrontmatter(content);
-    const task = result?.sequence?.[0];
-    expect(task?.name).toBe('task-one');
-    expect(task?.prompt).toBe('Do task one');
-  });
-
-  it('ignores comments in YAML', () => {
-    const content = `---
-description: Test agent
-# This is a comment
-sequence:
-  - name: task-one
-    prompt: Do task one
----`;
-
-    const result = parseFrontmatter(content);
-    expect(result?.sequence).toHaveLength(1);
-  });
-
-  it('parses sequence with and without validation in same list', () => {
-    const content = `---
-description: Test agent
-sequence:
-  - name: task-one
-    prompt: Do task one
-  - name: task-two
-    prompt: Do task two
-    validate:
-      - type: bash
-        command: echo ok
-  - name: task-three
-    prompt: Do task three
----`;
-
-    const result = parseFrontmatter(content);
-    expect(result?.sequence).toHaveLength(3);
-    expect(result?.sequence?.[0]?.validate).toEqual([]);
-    expect(result?.sequence?.[1]?.validate).toHaveLength(1);
-    expect(result?.sequence?.[2]?.validate).toEqual([]);
+  it('handles multiple validation rules on a single task', async () => {
+    const config: Config = {
+      agent: {
+        'test-agent': {
+          sequence: [
+            {
+              name: 'task',
+              prompt: 'Do something',
+              validate: [
+                {
+                  type: 'bash',
+                  command: 'npm test',
+                },
+                {
+                  type: 'tool_call',
+                  tool: 'bash',
+                  count: 2,
+                },
+                {
+                  type: 'llm_judge',
+                  prompt: 'Is it done?',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const result = await readAgentSequence('test-agent', config);
+    expect(result?.[0]?.validate).toHaveLength(3);
+    expect(result?.[0]?.validate?.map((v) => v.type)).toEqual([
+      'bash',
+      'tool_call',
+      'llm_judge',
+    ]);
   });
 });

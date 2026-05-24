@@ -1,6 +1,13 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as yaml from 'js-yaml';
+import { z } from 'zod';
+import type { Config } from '@opencode-ai/plugin';
+
+/**
+ * Validation rule to check before advancing to the next task
+ */
+export interface ValidationRule {
+  type: 'llm_judge' | 'tool_call' | 'bash';
+  [key: string]: unknown;
+}
 
 /**
  * Represents a single task in a sequence
@@ -12,88 +19,52 @@ export interface SequenceTask {
 }
 
 /**
- * Validation rule to check before advancing to the next task
+ * Zod schema for validating sequence tasks at runtime
+ * Ensures that sequence definitions conform to the expected structure:
+ * {
+ *   agent: {
+ *     "agent-name": {
+ *       sequence: [
+ *         {
+ *           name: string;
+ *           prompt: string;
+ *           validate?: Array<{ type: 'llm_judge' | 'tool_call' | 'bash'; ... }>
+ *         }
+ *       ]
+ *     }
+ *   }
+ * }
  */
-export interface ValidationRule {
-  type: 'llm_judge' | 'tool_call' | 'bash';
-  [key: string]: unknown;
-}
+const ValidationRuleSchema = z.object({
+  type: z.enum(['llm_judge', 'tool_call', 'bash']),
+}).passthrough();
+
+const SequenceTaskSchema = z.object({
+  name: z.string(),
+  prompt: z.string(),
+  validate: z.array(ValidationRuleSchema).optional(),
+});
+
+const SequenceSchema = z.array(SequenceTaskSchema);
 
 /**
- * Agent frontmatter structure with optional sequence field
- */
-export interface AgentFrontmatter {
-  description: string;
-  sequence?: SequenceTask[];
-  [key: string]: unknown;
-}
-
-/**
- * Parse YAML frontmatter from agent Markdown file
- */
-export function parseFrontmatter(content: string): AgentFrontmatter | null {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return null;
-
-  const yamlContent = match[1];
-  try {
-    const parsed = yaml.load(yamlContent!) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (!('description' in parsed)) return null;
-
-    // Normalize sequence if present
-    if ('sequence' in parsed && Array.isArray(parsed.sequence)) {
-      parsed.sequence = parsed.sequence.map((task: any) => {
-        const normalized: SequenceTask = {
-          name: String(task.name || ''),
-          prompt: String(task.prompt || ''),
-        };
-        if (task.validate && Array.isArray(task.validate)) {
-          normalized.validate = task.validate.map((rule: any) => ({
-            type: rule.type || 'llm_judge',
-            ...rule,
-          }));
-        } else {
-          normalized.validate = [];
-        }
-        return normalized;
-      });
-    }
-
-    return parsed as AgentFrontmatter;
-  } catch (err) {
-    return null;
-  }
-}
-
-/**
- * Read and parse the sequence from an agent's Markdown file
+ * Read and parse the sequence from an agent's OpenCode configuration.
+ * 
  * @param agentName The name of the agent (e.g., "my-agent")
- * @param directory The project directory containing .opencode/agents/
- * @returns The sequence tasks, or null if not found or no sequence defined
+ * @param config The OpenCode plugin configuration
+ * @returns The validated sequence tasks, or null if not found or no sequence defined
+ * @throws {z.ZodError} If the sequence configuration is invalid
  */
 export async function readAgentSequence(
   agentName: string,
-  directory: string,
+  config: Config | undefined,
 ): Promise<SequenceTask[] | null> {
-  const agentPath = path.join(
-    directory,
-    '.opencode',
-    'agents',
-    `${agentName}.md`,
-  );
-
-  try {
-    const content = await fs.readFile(agentPath, 'utf-8');
-    const frontmatter = parseFrontmatter(content);
-
-    if (!frontmatter) {
-      return null;
-    }
-
-    return frontmatter.sequence || null;
-  } catch {
-    // File doesn't exist or can't be read
+  const agentConfig = config?.agent?.[agentName];
+  
+  if (!agentConfig?.sequence) {
     return null;
   }
+
+  // Validate the sequence structure at runtime
+  return SequenceSchema.parse(agentConfig.sequence);
 }
