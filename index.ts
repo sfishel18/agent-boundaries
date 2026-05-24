@@ -38,7 +38,7 @@ export const BoundariesPlugin: Plugin = async ({ client }, options = {}) => {
       }
       const command: string = output.args.command ?? '';
       const description: string = output.args.description ?? '';
-      if (description.trimStart().startsWith('OVERRIDE:')) {
+      if (description.trimStart().startsWith('(Ignoring reminder)')) {
         return;
       }
       const primitives = splitIntoCommands(command);
@@ -47,7 +47,7 @@ export const BoundariesPlugin: Plugin = async ({ client }, options = {}) => {
           if (reminder.pattern.test(primitive)) {
             throw new Error(
               `Reminder: ${reminder.message}\n\n` +
-                `If you want to run this command anyway, set the tool call description to start with "OVERRIDE:" to bypass this check.`,
+                `If you want to run this command anyway, set the tool call description to start with "(Ignoring reminder)" to bypass this check.`,
             );
           }
         }
