@@ -33,7 +33,6 @@ interface TranscriptLine {
 const ValidatorSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('bash'), command: z.string() }),
   z.object({ type: z.literal('tool_call'), tool: z.string() }),
-  z.object({ type: z.literal('human_approval'), message: z.string() }),
   z.object({
     type: z.literal('llm_judge'),
     criteria: z.string(),

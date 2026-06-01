@@ -145,11 +145,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const err = await validateLLMJudge(validator.criteria, model, apiKey);
           if (err) errors.push(err);
         }
-      } else if (validator.type === 'human_approval') {
-        // TODO: implement via MCP elicitation
-        // server.createElicitation({ message: validator.message, ... })
-        errors.push(`human_approval validator is not yet implemented`);
-      }
       // tool_call: handled by PreToolUse hook before this runs
     }
 
