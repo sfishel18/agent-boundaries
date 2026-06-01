@@ -11,6 +11,14 @@
       "required": false
     }
   },
+  "mcpServers": [
+    {
+      "name": "agent-boundaries",
+      "type": "stdio",
+      "command": "bun",
+      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/mcp-server/index.ts"]
+    }
+  ],
   "hooks": {
     "SessionStart": [
       {
@@ -29,6 +37,15 @@
           {
             "type": "command",
             "command": "bun run \"${CLAUDE_PLUGIN_ROOT}/scripts/check-reminders.ts\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__agent-boundaries__next_task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run \"${CLAUDE_PLUGIN_ROOT}/scripts/next-task-hook.ts\""
           }
         ]
       }
