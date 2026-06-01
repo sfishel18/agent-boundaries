@@ -1,4 +1,3 @@
-import type { PluginOptions } from '@opencode-ai/plugin';
 import bashParser from 'bash-parser';
 
 export type CommandExpansion = { type: 'CommandExpansion'; commandAST: ASTNode };
@@ -157,28 +156,4 @@ export function splitIntoCommands(command: string): string[] {
   } catch {
     return [command];
   }
-}
-
-export function parseReminders(
-  options: PluginOptions,
-): Array<{ pattern: RegExp; message: string }> {
-  const reminders: Array<{ pattern: RegExp; message: string }> = [];
-
-  for (const [key, value] of Object.entries(options)) {
-    const match = key.match(/^reminder\((.+)\)$/);
-    if (!match || typeof value !== 'string') continue;
-
-    const pattern = match[1]!;
-
-    // Treat pattern as raw regex - wrap in ^ to anchor start, no end anchor
-    try {
-      const regex = new RegExp(`^(${pattern})`);
-      reminders.push({ pattern: regex, message: value });
-    } catch {
-      // Invalid regex - skip this pattern gracefully
-      continue;
-    }
-  }
-
-  return reminders;
 }

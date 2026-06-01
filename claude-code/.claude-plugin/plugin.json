@@ -1,0 +1,5 @@
+{
+  "name": "agent-boundaries",
+  "version": "0.1.0",
+  "description": "Enforce agent boundary rules in Claude Code"
+}
