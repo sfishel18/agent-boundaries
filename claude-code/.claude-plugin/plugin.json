@@ -1,0 +1,54 @@
+{
+  "name": "agent-boundaries",
+  "version": "0.1.0",
+  "description": "Enforce agent boundary rules in Claude Code",
+  "userConfig": {
+    "reminders": {
+      "type": "string",
+      "title": "Bash command reminders",
+      "description": "Format: 'regex -> message' (one per entry). Example: 'rm -rf -> Warning: destructive command'",
+      "multiple": true,
+      "required": false
+    }
+  },
+  "mcpServers": [
+    {
+      "name": "agent-boundaries",
+      "type": "stdio",
+      "command": "bun",
+      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/mcp-server/index.ts"]
+    }
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"${CLAUDE_PLUGIN_ROOT}\" && bun install --frozen-lockfile 2>/dev/null || bun install"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run \"${CLAUDE_PLUGIN_ROOT}/scripts/check-reminders.ts\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__agent-boundaries__next_task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run \"${CLAUDE_PLUGIN_ROOT}/scripts/next-task-hook.ts\""
+          }
+        ]
+      }
+    ]
+  }
+}
